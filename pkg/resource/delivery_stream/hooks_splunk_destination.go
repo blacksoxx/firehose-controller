@@ -19,8 +19,11 @@ import (
 	svcsdktypes "github.com/aws/aws-sdk-go-v2/service/firehose/types"
 )
 
-// Maps a SplunkDestinationDescription onto the Spec, keeping the reference
-// wrappers and the HEC token secret reference the description cannot carry.
+// Maps a SplunkDestinationDescription onto the Spec. Every described field
+// is written, nil included: Firehose leaves unset fields out of the
+// description, and keeping the desired value there would hide a spec change
+// from the delta. The HEC token secret reference and the resource reference
+// wrappers are never described and stay as they are.
 func readSplunkDestinationDescription(ko *svcapitypes.DeliveryStream, resp *svcsdktypes.SplunkDestinationDescription) {
 	if resp == nil {
 		return
@@ -31,21 +34,23 @@ func readSplunkDestinationDescription(ko *svcapitypes.DeliveryStream, resp *svcs
 	}
 	spec := ko.Spec.SplunkDestinationConfiguration
 
-	if resp.HECEndpoint != nil {
-		spec.HECEndpoint = resp.HECEndpoint
-	}
+	spec.HECEndpoint = resp.HECEndpoint
+	spec.HECEndpointType = nil
 	if resp.HECEndpointType != "" {
 		spec.HECEndpointType = aws.String(string(resp.HECEndpointType))
 	}
+	spec.HECAcknowledgmentTimeoutInSeconds = nil
 	if resp.HECAcknowledgmentTimeoutInSeconds != nil {
 		spec.HECAcknowledgmentTimeoutInSeconds = aws.Int64(int64(*resp.HECAcknowledgmentTimeoutInSeconds))
 	}
+	spec.RetryOptions = nil
 	if resp.RetryOptions != nil {
 		spec.RetryOptions = &svcapitypes.SplunkRetryOptions{}
 		if resp.RetryOptions.DurationInSeconds != nil {
 			spec.RetryOptions.DurationInSeconds = aws.Int64(int64(*resp.RetryOptions.DurationInSeconds))
 		}
 	}
+	spec.S3BackupMode = nil
 	if resp.S3BackupMode != "" {
 		spec.S3BackupMode = aws.String(string(resp.S3BackupMode))
 	}
@@ -55,12 +60,15 @@ func readSplunkDestinationDescription(ko *svcapitypes.DeliveryStream, resp *svcs
 		}
 		mergeS3DestinationDescription(spec.S3Configuration, resp.S3DestinationDescription)
 	}
+	spec.ProcessingConfiguration = nil
 	if resp.ProcessingConfiguration != nil {
 		spec.ProcessingConfiguration = processingConfigurationFromSDK(resp.ProcessingConfiguration)
 	}
+	spec.CloudWatchLoggingOptions = nil
 	if resp.CloudWatchLoggingOptions != nil {
 		spec.CloudWatchLoggingOptions = cloudWatchLoggingOptionsFromSDK(resp.CloudWatchLoggingOptions)
 	}
+	spec.BufferingHints = nil
 	if resp.BufferingHints != nil {
 		spec.BufferingHints = &svcapitypes.SplunkBufferingHints{}
 		if resp.BufferingHints.IntervalInSeconds != nil {
@@ -70,7 +78,9 @@ func readSplunkDestinationDescription(ko *svcapitypes.DeliveryStream, resp *svcs
 			spec.BufferingHints.SizeInMBs = aws.Int64(int64(*resp.BufferingHints.SizeInMBs))
 		}
 	}
-	if resp.SecretsManagerConfiguration != nil {
+	if resp.SecretsManagerConfiguration == nil {
+		spec.SecretsManagerConfiguration = nil
+	} else {
 		if spec.SecretsManagerConfiguration == nil {
 			spec.SecretsManagerConfiguration = &svcapitypes.SecretsManagerConfiguration{}
 		}
@@ -81,13 +91,7 @@ func readSplunkDestinationDescription(ko *svcapitypes.DeliveryStream, resp *svcs
 // mergeSecretsManagerConfiguration writes the observed values onto spec and
 // keeps the role and secret reference wrappers.
 func mergeSecretsManagerConfiguration(spec *svcapitypes.SecretsManagerConfiguration, resp *svcsdktypes.SecretsManagerConfiguration) {
-	if resp.Enabled != nil {
-		spec.Enabled = resp.Enabled
-	}
-	if resp.RoleARN != nil {
-		spec.RoleARN = resp.RoleARN
-	}
-	if resp.SecretARN != nil {
-		spec.SecretARN = resp.SecretARN
-	}
+	spec.Enabled = resp.Enabled
+	spec.RoleARN = resp.RoleARN
+	spec.SecretARN = resp.SecretARN
 }

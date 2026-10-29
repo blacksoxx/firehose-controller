@@ -126,6 +126,48 @@ func TestReadSplunkDestinationDescriptionEmptySpec(t *testing.T) {
 	}
 }
 
+func TestReadSplunkDestinationDescriptionClearsOmittedFields(t *testing.T) {
+	// A stream described without processing or Secrets Manager settings must
+	// not keep the desired ones, or a patch that only adds them never reaches
+	// UpdateDestination.
+	secretRef := &ackv1alpha1.AWSResourceReferenceWrapper{From: &ackv1alpha1.AWSResourceReference{Name: aws.String("secret")}}
+	token := &ackv1alpha1.SecretKeyReference{Key: "token"}
+	ko := &svcapitypes.DeliveryStream{}
+	ko.Spec.SplunkDestinationConfiguration = &svcapitypes.SplunkDestinationConfiguration{
+		HECToken:                          token,
+		HECAcknowledgmentTimeoutInSeconds: aws.Int64(600),
+		RetryOptions:                      &svcapitypes.SplunkRetryOptions{DurationInSeconds: aws.Int64(60)},
+		ProcessingConfiguration:           &svcapitypes.ProcessingConfiguration{Enabled: aws.Bool(true)},
+		SecretsManagerConfiguration: &svcapitypes.SecretsManagerConfiguration{
+			Enabled:   aws.Bool(true),
+			SecretARN: aws.String("arn:aws:secretsmanager:eu-west-1:123456789012:secret:hec"),
+			SecretRef: secretRef,
+		},
+	}
+
+	readSplunkDestinationDescription(ko, &svcsdktypes.SplunkDestinationDescription{
+		HECEndpoint:     aws.String("https://splunk.example.com:8088"),
+		HECEndpointType: svcsdktypes.HECEndpointTypeRaw,
+	})
+
+	spec := ko.Spec.SplunkDestinationConfiguration
+	if spec.HECAcknowledgmentTimeoutInSeconds != nil || spec.RetryOptions != nil {
+		t.Errorf("scalar fields missing from the description must be cleared: %+v", spec)
+	}
+	if spec.ProcessingConfiguration != nil {
+		t.Errorf("ProcessingConfiguration missing from the description must be cleared: %+v", spec.ProcessingConfiguration)
+	}
+	if spec.SecretsManagerConfiguration != nil {
+		t.Errorf("SecretsManagerConfiguration missing from the description must be cleared: %+v", spec.SecretsManagerConfiguration)
+	}
+	if spec.HECToken != token {
+		t.Errorf("HECToken secret reference was dropped")
+	}
+	if aws.ToString(spec.HECEndpoint) != "https://splunk.example.com:8088" {
+		t.Errorf("HECEndpoint: got %q", aws.ToString(spec.HECEndpoint))
+	}
+}
+
 func TestSetDestinationsSplunk(t *testing.T) {
 	ko := &svcapitypes.DeliveryStream{}
 	resp := &svcsdk.DescribeDeliveryStreamOutput{
